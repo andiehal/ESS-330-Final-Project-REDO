@@ -1,0 +1,23 @@
+project:
+  type: manuscript
+  output-dir: docs
+
+title: "ESS 330 Final Project - Wood Thrush Conservation"
+bibliography: references.bib
+csl: apa.csl
+
+manuscript:
+  article: index.qmd
+
+format:
+  html:
+    self-contained: true
+    comments:
+      hypothesis: true
+  docx: default
+  jats: default
+
+execute:
+  freeze: true
+
+editor: visual

@@ -1,0 +1,599 @@
+---
+title: Final Project - Wood Thrush Response
+authors:
+  - name: Leona Myers
+    affiliation: 
+      - Colorado State University
+    roles:
+      - Writing
+      - Coding
+      - Refining
+    corresponding: true
+  - name: Andie Hall
+    affiliation: 
+      - Colorado State University
+    roles:
+      - Writing
+      - Coding
+      - Refining
+      
+execute: 
+  echo: true
+  
+bibliography: references.bib
+csl: apa.csl
+---
+
+# Climate Change and Avian Response: Assessing the Effects of CO₂ and Temperature on Wood Thrush Populations
+
+## Abstract -
+
+As climate change continues to drive research goals, different areas of impact arise surrounding not only humans but environmental and wildlife harm. Carbon dioxide is one of the main contributors to climate change, directly impacting annual temperatures and disturbing typical weather patterns. Wildlife, specifically avian species, are queue dependent on temperatures for specific phenological stages like migration (@neelang2024). In recent decades, there has been an observed decline to several avian populations, leading both avian and climate scientists to answer if climate change has disturbed the migration periods, which can directly impact the effectiveness of their breeding cycles. By analyzing annual temperatures and carbon emissions, this study aims to identify a correlation between changing variables and observed migration dates.
+
+## Part 1. Introduction -
+
+**Problem Overview**: In recent decades, global climate change, driven by increased carbon dioxide emissions, has contributed to rising temperatures and disrupted ecological systems (@noaa2024climate). Many migratory bird species, such as the subject of this study, the Wood Thrush (Hylocichla mustelina), are particularly vulnerable to these changes due to their reliance on specific environmental cues for migration, breeding, and survival. The Wood Thrush is included on the Yellow Watch List for birds most at risk of extinction, and it is one of the most prominent examples of declining forest songbirds in North America (@cornell2024woodthrush). Populations have declined by 1.3% per year, resulting in a cumulative decline of approximately 50% between 1966 and 2019 (@cornell2024woodthrush). Declines in Wood Thrush populations have been observed across North America, yet the extent to which atmospheric CO2 levels and associated temperature changes contribute to these declines remains unclear.
+
+
+```{r}
+#| label: fig-wood-thrush
+#| echo: false
+#| fig-align: center
+#| fig-cap: Wood Thrush - Lance Leonhardt (Audubon Vermont)
+#| fig-width: 6
+knitr::include_graphics("~/Github/ESS-330-Final-Project-REDO/images/Wood_Thrush_Photo.jpg")
+```
+
+------------------------------------------------------------------------
+
+## Part 2. Materials and Methods -
+
+### I. Research Goal and Data Sources
+
+**This research will investigate the effects of atmospheric CO₂ concentrations and temperature changes on the population dynamics of the Wood Thrush (Hylocichla mustelina)**, a migratory songbird of conservation concern. The study integrates climate and ecological data from multiple large-scale sources: temperature records from the National Weather Service, (@noaa2024climate) bird abundance and distribution data from Cornell’s eBird Dataset (@cornell2024woodthrush), and atmospheric CO₂ data from the Global Carbon Budget (@friedlingstein2023global). Using these data sources, we can create a model to help determine the effect of these variables on the arrival and departure dates of these species along the mid-northeastern coast of the United States from 1966 to 2019.
+
+### II. Methods Overview
+
+1.  **Data acquisition**
+
+    -   Climate Data: National Weather Service
+
+    -   CO₂ Data: Global Carbon Budget
+
+    -   Bird Observation Data: Cornell Lab’s eBird dataset
+
+2.  **Data Cleaning and Processing**
+
+    -   **Climate Data -** Imported 7 different datasets from the states above that recorded annual temperatures for each month between 1966 and 2019 and combined into one large dataset, “All_Weather_Data.csv”
+
+        -   **Difficulties**: The data was extremely time-consuming to clean and process into a large dataset due to the website’s pdf format for data exports. Using Excel’s data from the file helped to import the data and allowed for processing and cleaning of the data before being inserted into the rProject data directory.
+
+    -   **CO2 Data -** Downloaded from the Global Carbon Budget and then uploaded to Rstudio. No additional cleaning was needed.
+
+        -   **Difficulties**: This data set only includes annual emission while other data sets include monthly data, but was the most accessible to our report.
+
+    -   **Wood Thrush Data -** Filtered Wood Thrush eBird data to between the years of 1966 and 2019, along with filtering the location of the bird to these specific states: Pennsylvania, West Virginia, Virginia, Kentucky, Ohio, Indiana, and Tennessee. “Wood_Thrush_Raw.csv”
+
+        -   **Difficulties**: The dataset is about 131.5 MB and cannot be uploaded to the git repository, meaning data sharing had to be done via email rather than sharing the actual repo for us to pull and push. 
+
+3.  **Statistical Analysis**
+
+    **Preliminary Analysis - Linear Regression Model**
+
+    -   To get a basic understand of the correlation relationship between temperature, CO2, and dates of observation, we created a linear model to visualize and create statistical information.
+
+    **Main Analysis - Machine Learning Prediction Models**
+
+    -   Using the multiple datasets to account for temperature, CO2, and observations, we created multiple machine learning models: Linear Regression, Random Forest, and XGBoost. To identify the model of best fit, we created a workflow that would allow us to collect the metrics and determine the model we should choose based on the R-squared and RMSE values.
+
+    -   Using two separate recipes to account for both the integration of temperature on observation dates, along with CO2 emissions, to ensure that they would not interfere with each other, and give us much more data to analyze. After prepping and baking the data, we created workflows to run the models. In total, we tested about 6 models, three for each recipe, and deciphered that Random Forest gives us the best predictions for both predictor variables.
+
+    -   Once models were defined with both models and fitted to the resamples of the CV fold, we ran the models to determine their statistical significance and to see if the outcome of the model would give us data that would either prove or disprove our hypothesis. We then, with these models we create visualizations to represent and understand the data much better.
+
+4.  **Visualization**
+
+    -   Creating plots for the relationship between observation date and CO2, along with a separate relationship between observation date and temperature. In total, there will be four main graphs to understand their impact on both Spring Arrival dates and Fall Departure dates.
+
+## Part 3. Preliminary Analysis - Exploring the Data
+
+```{r}
+#| message: false
+#| warning: false
+# Library Codes used
+library(tidyverse)
+library(tidymodels)
+library(here)
+library(readr)
+library(lubridate)
+library(zoo)
+```
+
+### I. Reading in Data Bases
+
+```{r}
+#| message: false
+#| warning: false
+# CO2 Emissions
+Annua_CO2_Emissions <- read_csv("data/annual-co2-emissions-per-country.csv")
+
+# Temperature Data
+AllWeatherData <- read_csv("data/AllWeatherData.csv")
+
+# Wood Thrush Data
+Wood_Thrush <- read_csv("data/Wood_Thrush.csv")
+```
+
+### II. Prepping/Cleaning Data Sets
+
+```{r}
+#| message: false
+#| warning: false
+# Formatting Wood Thrush
+Wood_Thrush <- Wood_Thrush |>
+  select(COUNTRY, `COUNTRY CODE`, STATE, `OBSERVATION COUNT`, `OBSERVATION DATE`, LATITUDE, LONGITUDE) |>
+  mutate(`OBSERVATION DATE` = as.Date(`OBSERVATION DATE`, format = "%m/%d/%Y"),
+         Year = year(`OBSERVATION DATE`))
+
+# Formatting Weather
+Annual_Weather <- AllWeatherData |>
+  select(Year, Annual, STATE)
+
+# Formatting CO2
+Annua_CO2_Emissions <- Annua_CO2_Emissions |>
+  select(Year, `Annual CO₂ emissions`)
+
+# Joined Data
+Main_Data <- Wood_Thrush |>
+  inner_join(Annual_Weather, by = c("Year", "STATE")) |>
+  inner_join(Annua_CO2_Emissions, by = "Year") |>
+  mutate(DayOfYear = yday(`OBSERVATION DATE`)) |>
+  drop_na(Annual, `Annual CO₂ emissions`, DayOfYear)
+
+# Creating Springtime Dataset
+Spring_Arrival <- Main_Data |>
+  group_by(year(`OBSERVATION DATE`)) |>
+  slice_min(`OBSERVATION DATE`, with_ties = FALSE)
+
+# Creating Falltime Dataset
+Fall_Departure <- Main_Data |>
+  group_by(year(`OBSERVATION DATE`)) |>
+  slice_max(`OBSERVATION DATE`, with_ties = FALSE)
+```
+
+### III. Creating Linear Model for Observation Dates
+
+#### Temperature Models -
+
+```{r}
+#| message: false
+#| warning: false
+# Temperature Model - Spring
+Temp_S_Main_Model <- lm(formula = DayOfYear ~ Annual, data = Spring_Arrival)
+
+summary(Temp_S_Main_Model)
+
+springp1 <- ggplot(Spring_Arrival, aes(x = Annual, y = DayOfYear)) +
+  geom_point(color = "#87CEFA", alpha = 0.6) +  
+  geom_smooth(method = "lm", color = "#9BCD9B", se = TRUE) +  
+  labs(
+    title = "Effect of Annual Temperature on\nSpring Arrival Date",
+    x = "Annual Average Temperature (°C)",  
+    y = "Day of Year of Spring Arrival"
+  ) +
+  theme_minimal()
+
+# Temperature Model - Spring
+Temp_F_Main_Model <- lm(formula = DayOfYear ~ Annual, data = Fall_Departure)
+
+summary(Temp_F_Main_Model)
+
+fallp1 <- ggplot(Fall_Departure, aes(x = Annual, y = DayOfYear)) +
+  geom_point(color = "palevioletred1", alpha = 0.6) +  
+  geom_smooth(method = "lm", color = "#FF7256", se = TRUE) +  
+  labs(
+    title = "Effect of Annual Temperature on\nFall Departure Date",
+    x = "Annual Average Temperature (°C)",  
+    y = "Day of Year of Fall Depature (Last Observation)"
+  ) +
+  theme_minimal()
+
+# Combine plots side by side
+
+library(patchwork)
+
+combined_plot <- springp1 + fallp1
+
+print(combined_plot)
+```
+
+#### CO2 Models -
+
+```{r}
+#| message: false
+#| warning: false
+library(patchwork)
+# CO2 Model - Spring
+CO2_S_Main_Model <- lm(formula = DayOfYear ~ `Annual CO₂ emissions`, data = Spring_Arrival)
+
+summary(CO2_S_Main_Model)
+
+springp2 <- ggplot(Spring_Arrival, aes(x = `Annual CO₂ emissions`, y = DayOfYear)) +
+  geom_point(color = "#FFBBFF", alpha = 0.6) +  
+  geom_smooth(method = "lm", color = "palevioletred2", se = TRUE) +  
+  labs(
+    title = "Effect of Annual CO2 Emissions on\npring Arrival Date",
+    x = "Annual CO2 Emissions (ppm)", 
+    y = "Day of Year of Spring Arrival"
+  ) +
+  theme_minimal()
+
+# CO2 Model - Fall
+CO2_F_Main_Model <- lm(formula = DayOfYear ~ `Annual CO₂ emissions`, data = Fall_Departure)
+
+summary(CO2_F_Main_Model)
+
+fallp2 <- ggplot(Fall_Departure, aes(x = `Annual CO₂ emissions`, y = DayOfYear)) +
+  geom_point(color = "tomato2", alpha = 0.6) +  # Scatter points
+  geom_smooth(method = "lm", color = "#EE7942", se = TRUE) +  # Regression line with confidence interval
+  labs(
+    title = "Effect of Annual CO2 Emissions on\nFall Departure Date",
+    x = "Annual CO2 Emissions (ppm)",  # Adjust units if needed
+    y = "Day of Year of Fall Departure"
+  ) +
+  theme_minimal()
+
+combined_plot2 <- springp2 + fallp2
+
+print(combined_plot2)
+
+```
+
+## Part 4. Main Analysis - Machine Learning Model
+
+### I. Splitting and CV folds
+
+```{r}
+#| message: false
+#| warning: false
+set.seed(123)
+WT_split <- initial_split(Main_Data, prop = 0.8)
+WT_train <- training(WT_split)
+WT_test  <- testing(WT_split)
+WT_cv <- vfold_cv(WT_train, v = 5)
+```
+
+### II. Recipes
+
+```{r}
+#| message: false
+#| warning: false
+# CO2 Recipe 
+CO2_rec <- recipe(formula = DayOfYear ~ `Annual CO₂ emissions`, data = WT_train) |>
+  step_log(all_predictors()) |>
+  step_naomit(all_predictors(), all_outcomes())
+
+# Temperature Recipe
+Temp_rec <- recipe(formula = DayOfYear ~ Annual, data = WT_train) |>
+  step_log(all_predictors(), offset = 1) |>
+  step_naomit(all_predictors(), all_outcomes())
+ 
+```
+
+### III. Define Models
+
+```{r}
+#| message: false
+#| warning: false
+lm_model <- linear_reg() |> set_engine("lm") |> set_mode("regression")
+rf_model <- rand_forest(trees = 100) |> set_engine("ranger") |> set_mode("regression")
+xg_model <- boost_tree() |> set_engine("xgboost") |> set_mode("regression")
+```
+
+### IV. Workflows
+
+```{r}
+#| message: false
+#| warning: false
+# CO2 Workflows
+wf_lm_CO2 <- workflow() |>
+  add_model(lm_model) |>
+  add_recipe(CO2_rec)
+
+wf_rf_CO2 <- workflow() |>
+  add_model(rf_model) |>
+  add_recipe(CO2_rec)
+
+wf_xg_CO2 <- workflow() |>
+  add_model(xg_model) |>
+  add_recipe(CO2_rec)
+
+# Temperature Workflows
+wf_lm_Temp <- workflow() |>
+  add_model(lm_model) |>
+  add_recipe(Temp_rec)
+
+wf_rf_Temp <- workflow() |>
+  add_model(rf_model) |>
+  add_recipe(Temp_rec)
+
+wf_xg_Temp <- workflow() |>
+  add_model(xg_model) |>
+  add_recipe(Temp_rec)
+```
+
+### V.a CO2 - Fitting Models
+
+```{r}
+#| message: false
+#| warning: false
+# Linear - CO2
+res_lm_CO2 <- fit_resamples(
+  wf_lm_CO2,
+  resamples = WT_cv,
+  metrics = metric_set(rmse, rsq),
+  control = control_resamples(save_pred = TRUE)
+)
+
+# Random Forest - CO2
+res_rf_CO2 <- fit_resamples(
+  wf_rf_CO2,
+  resamples = WT_cv,
+  metrics = metric_set(rmse, rsq),
+  control = control_resamples(save_pred = TRUE)
+)
+
+# XG Boosted Tree - CO2
+res_xg_CO2 <- fit_resamples(
+  wf_xg_CO2,
+  resamples = WT_cv,
+  metrics = metric_set(rmse, rsq),
+  control = control_resamples(save_pred = TRUE)
+)
+```
+
+### V.b Temperature - Fitting Models
+
+```{r}
+#| message: false
+#| warning: false
+# Linear - Temperature 
+res_lm_Temp <- fit_resamples(
+  wf_lm_Temp,
+  resamples = WT_cv,
+  metrics = metric_set(rmse, rsq),
+  control = control_resamples(save_pred = TRUE)
+)
+
+# Random Forest - Temperature
+res_rf_Temp <- fit_resamples(
+  wf_rf_Temp,
+  resamples = WT_cv,
+  metrics = metric_set(rmse, rsq),
+  control = control_resamples(save_pred = TRUE)
+)
+
+# XG Boosted Tree - Temperature
+res_xg_Temp <- fit_resamples(
+  wf_xg_Temp,
+  resamples = WT_cv,
+  metrics = metric_set(rmse, rsq),
+  control = control_resamples(save_pred = TRUE)
+)
+```
+
+### VI. Metrics and Comparison
+
+```{r}
+#| message: false
+#| warning: false
+all_results <- bind_rows(
+  collect_metrics(res_lm_CO2) |> mutate(Model = "LM - CO2"),
+  collect_metrics(res_rf_CO2) |> mutate(Model = "RF - CO2"),
+  collect_metrics(res_xg_CO2) |> mutate(Model = "XG - CO2"),
+  collect_metrics(res_lm_Temp) |> mutate(Model = "LM - Temp"),
+  collect_metrics(res_rf_Temp) |> mutate(Model = "RF - Temp"),
+  collect_metrics(res_xg_Temp) |> mutate(Model = "XG - Temp")
+)
+
+all_results |>
+  filter(.metric == "rsq") |>
+  ggplot(aes(x = reorder(Model, mean), y = mean, fill = Model)) +
+  geom_col(show.legend = FALSE) +
+  labs(
+    title = "RSQ Comparison Across Models",
+    x = "Model",
+    y = "RSQ"
+  ) +
+  coord_flip() +
+  theme_minimal()
+
+```
+
+## Part 5. Full Analysis - Spring Arrival and Fall Departure Random Forest Predictions
+
+### I. Fit to Full Model (Spring and Fall \| CO2 and Temperature)
+
+```{r}
+#| message: false
+#| warning: false
+# Temperature Models
+rf_temp_spring_fit <- fit(wf_rf_Temp, data = Spring_Arrival)
+
+rf_temp_fall_fit <- fit(wf_rf_Temp, data = Fall_Departure)
+
+# CO2 Models
+rf_CO2_spring_fit <- fit(wf_rf_CO2, data = Spring_Arrival)
+
+rf_CO2_fall_fit <- fit(wf_rf_CO2, data = Fall_Departure)
+```
+
+### II. Predictions for Models
+
+```{r}
+#| message: false
+#| warning: false
+# Temperature Models
+temp_spring_preds <- predict(rf_temp_spring_fit, Spring_Arrival) |>
+  bind_cols(Spring_Arrival)
+
+temp_fall_preds <- predict(rf_temp_fall_fit, Fall_Departure) |>
+  bind_cols(Fall_Departure)
+
+# CO2 Models
+CO2_spring_preds <- predict(rf_CO2_spring_fit, Spring_Arrival) |>
+  bind_cols(Spring_Arrival)
+
+CO2_fall_preds <- predict(rf_CO2_fall_fit, Fall_Departure) |>
+  bind_cols(Fall_Departure)
+
+```
+
+### III. Plotting Temperature Prediction Models
+
+```{r}
+#| message: false
+#| warning: false
+library(patchwork) 
+
+# Spring Arrival
+p1 <- ggplot(temp_spring_preds, aes(x = .pred, y = DayOfYear)) +
+  geom_point(alpha = 0.9, color = "#A2CD5A") +
+  geom_smooth(method = "lm", se = FALSE, color = "black", linetype = "dashed") +
+  theme_minimal() +
+  labs(title = "Spring Arrival - Temperature Predictor:\nPredicted vs Actual Day\nof Year Observation",
+       x = "Predicted DOY", y = "Actual DOY")
+
+# Fall Departure
+p2 <- ggplot(temp_fall_preds, aes(x = .pred, y = DayOfYear)) +
+  geom_point(alpha = 0.9, color = "darkorange2") +
+  geom_smooth(method = "lm", se = FALSE, color = "black", linetype = "dashed") +
+  theme_minimal() +
+  labs(title = "Fall Departure - Temperature\nPredictor: Predicted vs Actual Day\nof Year Observation",
+       x = "Predicted DOY", y = "Actual DOY")
+
+
+p1 + p2
+
+```
+
+### IV. Plotting CO2 Prediction Models
+
+```{r}
+#| message: false
+#| warning: false
+
+# Spring Arrival
+p3 <- ggplot(CO2_spring_preds, aes(x = .pred, y = DayOfYear)) +
+  geom_point(alpha = 0.9, color = "pink1") +
+  geom_smooth(method = "lm", se = FALSE, color = "black", linetype = "dashed") +
+  theme_minimal() +
+  labs(title = "Spring Arrival - CO2 Predictor:\nPredicted vs Actual Day\nof Year Observation",
+       x = "Predicted DOY", y = "Actual DOY")
+
+# Fall Departure
+p4 <- ggplot(CO2_fall_preds, aes(x = .pred, y = DayOfYear)) +
+  geom_point(alpha = 0.9, color = "sienna2") +
+  geom_smooth(method = "lm", se = FALSE, color = "black", linetype = "dashed") +
+  theme_minimal() +
+  labs(title = "Fall Departure - CO2 Predictor:\nPredicted vs Actual Day\nof Year Observation",
+       x = "Predicted DOY", y = "Actual DOY")
+
+
+p3 + p4
+```
+
+## **Part 6. Results Discussion**
+
+To assess the relationship between climate variables and Wood Thrush migration phenology, we implemented and evaluated six machine learning models: linear regression, random forest, and XGBoost—each applied separately to CO₂ and temperature predictor datasets. Performance was measured using 5-fold cross-validation due to the size of the datasets and runtime constraints. With this we had 4 total final datasets, separated by Spring/Fall and Temperature/CO₂.
+
+The **random forest model with temperature** as the predictor emerged as the strongest model across both spring arrival and fall departure dates, showing the **lowest RMSE** and **highest R² values**, indicating superior predictive performance and robustness.
+
+### **I. Spring Arrival Predictions**
+
+#### Temperature Models -
+
+The Temperature Spring model's predictions showed a **tight clustering along the 1:1 line**, especially near the top-right of the plot. This indicates that as temperatures have risen, **Wood Thrushes are arriving later than expected**. This mismatch in timing may suggest a lag in response to changing environmental cues or a disruption in optimal conditions for early arrival.
+
+The higher accuracy in spring predictions may be because spring arrival is tightly regulated by temperature-dependent cues (such as snow melt, insect emergence, or vegetation growth), making it more sensitive to annual temperature changes.
+
+#### CO₂ Models -
+
+CO₂'s Spring model had similar results, with a clustering of points in the top right hand corner and fairly close to the actual dates. This is sensible with how CO₂ comes as a direct impact onto temperature and can provide data that states that as they move in similar directions, they both have impacts on migration periods and dates.
+
+The accuracy is reliable, however, when compared to the temperature model, they have differences in how many points are along this line or close to. In conclusion for spring arrival, CO₂ and temperature have a higher reliability to help predict dates with temperature being more accurate.
+
+### **II. Fall Departure Predictions**
+
+#### Temperature Models -
+
+Fall departure predictions demonstrated more **scatter and variability** compared to spring arrival. While the random forest model still performed best, the weaker R² values suggest that **fall migration timing is less directly tied to temperature or CO₂ alone**. The wider spread of points around the 1:1 line, particularly in the lower-left region, implies that **birds are departing earlier than expected** in many cases.
+
+This might indicate that other variables—such as food availability, photoperiod (day length), or precipitation patterns—play a larger role in influencing fall departure behavior.
+
+#### CO₂ Models -
+
+While temperature-based models consistently outperformed CO₂-based models, the **patterns in both sets of predictions were similar**, suggesting that CO₂ indirectly influences migration phenology through its effect on global temperatures.
+
+Visualizations comparing CO₂ and temperature models showed nearly **parallel trends**, with later spring arrivals and earlier fall departures becoming more common over time—consistent with broader ecological impacts of climate change.
+
+### III. Overall Analysis Conclusion
+
+From our multiple model simulations, we concluded that temperature has the bigger impact directly on migration dates. While CO₂ did have similar results to temperature, it had much more variability and less accuracy. This may be because of CO₂ potentially being an indirect impact on migration patterns, but can help to predict these dates when added to temperature models.
+
+**Future studies** could include more sophisticated models on computers that can run more in-depth and larger datasets. Along with more skill knowledge of RStudio and how to better create models that both predict and demonstrate correlation between predictor and response variables.
+
+**Some limitations** that we encountered throughout this project was mostly through data analysis and cleaning. Our climate data was particular to how it was supposed to be cleaned and took many hours of excel refining to be usable in RStudio. Another major roadblock that we encountered and was a large portion of our challenges was the rendering of our files to be able to display them as a website through Github pages. With multiple meetings dedicated to resolving this issue, we still faced many errors with long rendering periods, models taking hours to process, and seemingly endless errors. However, we preserved through it all to create a simple yet replicable method to help understand the correlation between temperature, CO₂, and migration dates.
+
+**The significance of this study** relates back to our original problem that inspired our target. Avian species are one of the longest standing species groups, dating back to before records existed. With their adaptable and resilient nature, they are ideal for studies regarding changes to key factors that can drastically harm their populations. Our goal with this study was to begin a coding process that can be replicated and used across multiple species of different conservation statuses. While this report may need more refining and different methods to achieve a successful and accurate depiction of the impact on these variables, it begins the discussion of how humans are not the only species to be impacted by CO₂ emissions and temperature variance.
+
+**Our take away** from this is that even as junior data analysts, we can create studies that can be built upon and developed to create solutions or incentives for policy management of wildlife and emissions. We hoped to contribute to the wider ecological research surrounding conservation of native and important species.
+
+### **IV. Visual Summary**
+
+We generated the following visualizations to illustrate key trends:
+
+-   **Figure 1**: Spring Arrival vs. Annual Temperature
+
+```{r}
+#| echo: false
+#| message: false
+#| warning: false
+print(p1)
+```
+
+-   **Figure 2**: Fall Departure vs. Annual Temperature
+
+```{r}
+#| echo: false
+#| message: false
+#| warning: false
+print(p2)
+```
+
+-   **Figure 3**: Spring Arrival vs. Annual CO₂
+
+```{r}
+#| echo: false
+#| message: false
+#| warning: false
+print(p3)
+```
+
+-   **Figure 4**: Fall Departure vs. Annual CO₂
+
+```{r}
+#| echo: false
+#| message: false
+#| warning: false
+print(p4)
+```
+
+Each figure includes:
+
+-   A 1:1 reference line for perfect prediction
+
+-   Color scaling by year or observation density (if used)
+
+-   Interpretation notes on clustering trends
+
+These visualizations confirm that the **relationship between climate variables and migration phenology is strong**, particularly for temperature and spring migration events.
